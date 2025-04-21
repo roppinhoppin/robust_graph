@@ -1,2 +1,7 @@
 Flask
 Gunicorn
+networkx
+matplotlib
+pandas
+numpy
+scipy
