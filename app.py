@@ -49,6 +49,43 @@ TEMPLATE = """
     <title>Random Byzantine Graphs</title>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
+      body {
+        font-family: Arial, sans-serif;
+      }
+      .form-container {
+        background-color: #f5f5f5;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+      }
+      .form-group {
+        display: inline-block;
+        margin-right: 15px;
+        margin-bottom: 10px;
+      }
+      .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+      }
+      .form-group input {
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        width: 80px;
+      }
+      .submit-btn {
+        background-color: #4CAF50;
+        color: white;
+        padding: 10px 15px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-top: 10px;
+      }
+      .submit-btn:hover {
+        background-color: #45a049;
+      }
       .graph-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
@@ -60,6 +97,7 @@ TEMPLATE = """
         padding: 15px;
         border-radius: 8px;
         position: relative;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       }
       .export-btn {
         background-color: #4CAF50;
@@ -97,11 +135,28 @@ TEMPLATE = """
     </style>
   </head>
   <body>
-    <form action="/" method="get" style="padding: 20px;">
-      <label for="num_graphs">Number of graphs to display:</label>
-      <input type="number" id="num_graphs" name="num_graphs" value="{{ num_graphs }}" min="1" max="100">
-      <button type="submit">Update</button>
-    </form>
+    <h1 style="text-align: center; margin: 20px 0;">Byzantine Graph Generator</h1>
+    <div class="form-container">
+      <form action="/" method="get">
+        <div class="form-group">
+          <label for="num_graphs">Number of graphs:</label>
+          <input type="number" id="num_graphs" name="num_graphs" value="{{ num_graphs }}" min="1" max="100">
+        </div>
+        <div class="form-group">
+          <label for="n">Total nodes (n):</label>
+          <input type="number" id="n" name="n" value="{{ n }}" min="1">
+        </div>
+        <div class="form-group">
+          <label for="n_byz">Byzantine nodes (n_byz):</label>
+          <input type="number" id="n_byz" name="n_byz" value="{{ n_byz }}" min="0" max="{{ n }}">
+        </div>
+        <div class="form-group">
+          <label for="f">Byzantine budget (f):</label>
+          <input type="number" id="f" name="f" value="{{ f }}" min="0" max="{{ n_byz }}">
+        </div>
+        <button type="submit" class="submit-btn">Generate Graphs</button>
+      </form>
+    </div>
     <div class="graph-grid">
     {% for graph in graphs %}
       <div class="graph-card">
@@ -138,6 +193,7 @@ TEMPLATE = """
     
     <script>
       $(document).ready(function() {
+        // Form validation for export forms
         $('form').submit(function(e) {
           if ($(this).attr('action').startsWith('/export')) {
             e.preventDefault();
@@ -164,6 +220,26 @@ TEMPLATE = """
             });
           }
         });
+        
+        // Parameter validation
+        $('#n, #n_byz, #f').on('input', function() {
+          var n = parseInt($('#n').val()) || 1;
+          var n_byz = parseInt($('#n_byz').val()) || 0;
+          var f = parseInt($('#f').val()) || 0;
+          
+          // Update max attributes
+          $('#n_byz').attr('max', n);
+          $('#f').attr('max', n_byz);
+          
+          // Adjust values if needed
+          if (n_byz > n) {
+            $('#n_byz').val(n);
+          }
+          
+          if (f > n_byz) {
+            $('#f').val(n_byz);
+          }
+        });
       });
     </script>
   </body>
@@ -172,15 +248,38 @@ TEMPLATE = """
 
 @app.route('/')
 def index():
+    # Get all parameters from the request
     num_graphs = int(request.args.get('num_graphs', default_num_graphs))
+    
+    # Get graph parameters with defaults
+    current_n = int(request.args.get('n', n))
+    current_n_byz = int(request.args.get('n_byz', n_byz))
+    current_f = int(request.args.get('f', f))
+    
+    # Validate parameters
+    if current_n < current_n_byz:
+        current_n = current_n_byz
+    if current_f > current_n_byz:
+        current_f = current_n_byz
+    
     graphs = []
     
     # Clear previous session graphs
     SESSION_GRAPHS.clear()
     
+    # Update the graph builders with current parameters
+    current_graph_builders = []
+    for gen_fn, params in graph_builders:
+        # Create a copy of params and update with current values
+        current_params = params.copy()
+        current_params['n'] = current_n
+        current_params['n_byz'] = current_n_byz
+        current_params['f'] = current_f
+        current_graph_builders.append((gen_fn, current_params))
+    
     for _ in range(num_graphs):
         # choose random example
-        gen_fn, p = random.choice(graph_builders)
+        gen_fn, p = random.choice(current_graph_builders)
         G, stats = gen_fn(**p)
         # unify μ₂ and max_b keys
         stats['mu2'] = stats.get('mu2', stats.get('μ₂(G_H)'))
@@ -211,7 +310,7 @@ def index():
         SESSION_GRAPHS[graph_id] = graph_data
         graphs.append({'img': img_data, 'stats': stats, 'id': graph_id})
 
-    return render_template_string(TEMPLATE, graphs=graphs, num_graphs=num_graphs)
+    return render_template_string(TEMPLATE, graphs=graphs, num_graphs=num_graphs, n=current_n, n_byz=current_n_byz, f=current_f)
 
 @app.route('/export/<graph_id>')
 def export_graph(graph_id):
