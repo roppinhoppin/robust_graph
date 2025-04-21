@@ -1,0 +1,10 @@
+.git
+.gitignore
+.gcloudignore
+__pycache__/
+*.py[cod]
+*$py.class
+env/
+venv/
+ENV/
+output/

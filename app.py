@@ -16,6 +16,9 @@ from gaucher_graph_experiments import gen_example, gen_example_er, gen_example_w
 
 app = Flask(__name__)
 
+# Get port from environment variable or default to 8080
+port = int(os.environ.get('PORT', 8080))
+
 n=40
 n_byz=5
 mu_min = 0 # min mu_2 of honest nodes
@@ -378,4 +381,4 @@ def export_graph(graph_id):
         return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False, host='0.0.0.0', port=port)
